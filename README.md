@@ -41,7 +41,7 @@ The Docker image is based on the official PostgreSQL image and includes:
 
 1. Build the Docker image:
    ```
-   docker build .
+   docker build -t postgres-backup .
    ```
 
 2. Run the container:
