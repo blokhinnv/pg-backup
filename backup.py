@@ -1,3 +1,4 @@
+from functools import partial
 import glob
 import os
 import subprocess
@@ -30,10 +31,10 @@ def send_telegram_message(message):
         logger.info(f"Failed to send Telegram message: {e}")
 
 
-def clean_old_dumps(db_name):
+def clean_old_dumps(db_name, is_weekly=False):
     # Get list of dump files for this database
     backup_dir = os.environ.get("BACKUP_DIR", "/backups")
-    dump_files = glob.glob(f"{backup_dir}/{db_name}_*.custom")
+    dump_files = glob.glob(f"{backup_dir}/{db_name}_{'weekly_' if is_weekly else ''}*.custom")
 
     # Sort files by modification time (newest first)
     dump_files.sort(key=os.path.getmtime, reverse=True)
@@ -48,7 +49,7 @@ def clean_old_dumps(db_name):
 
 
 # Function to perform database dump
-def perform_db_dump():
+def perform_db_dump(is_weekly=False):
     db_name = os.environ.get("POSTGRES_DB")
     if not db_name:
         send_telegram_message("Error: POSTGRES_DB environment variable not set")
@@ -56,7 +57,8 @@ def perform_db_dump():
 
     backup_dir = os.environ.get("BACKUP_DIR", "/backups")
     timestamp = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
-    file_name = f"{backup_dir}/{db_name}_{timestamp}.custom"
+
+    file_name = f"{backup_dir}/{db_name}_{'weekly_' if is_weekly else ''}{timestamp}.custom"
 
     try:
         subprocess.run(
@@ -66,7 +68,7 @@ def perform_db_dump():
         send_telegram_message(f"Database dump successful: {file_name}")
 
         # Clean old dumps after successful new dump
-        clean_old_dumps(db_name)
+        clean_old_dumps(db_name, is_weekly)
     except subprocess.CalledProcessError as e:
         send_telegram_message(f"Error during database dump: {e}")
 
@@ -75,6 +77,10 @@ if __name__ == "__main__":
     perform_db_dump()
     # Schedule the task
     schedule.every().day.at("00:00").do(perform_db_dump)
+
+    # Schedule the weekly task (every Monday at 00:00)
+    perform_weekly_db_dump = partial(perform_db_dump, is_weekly=True)
+    schedule.every().monday.at("00:00").do(perform_weekly_db_dump, is_weekly=True)
 
     # Run the script indefinitely
     while True:
